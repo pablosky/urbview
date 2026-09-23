@@ -23,5 +23,18 @@ services:
     depends_on:
       - db
 
+  # --- ADDED FRONTEND SERVICE ---
+  frontend:
+    build:
+      context: ./frontend # Change to ./urbview-frontend if that's what you named it
+    command: npm run dev -- --host
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # Prevents host node_modules from breaking container
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
 volumes:
   pgdata:
