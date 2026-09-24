@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { create } from 'zustand';
-import type { Feature, FeatureCollection, Polygon } from 'geojson';
+import type { FeatureCollection, Polygon } from 'geojson';
 import type { ApiResponse, AreaInfo, LayerKpis } from '../types';
 
 export const LAMP_LAYER = 'street_lamps';
@@ -9,16 +9,17 @@ export const CHART_LAYER = 'buildings';
 interface CategoryDatum {
   category: string;
   count: number;
-  layer: string;  // 'buildings' | 'street_lamps'
+  layer: string;
 }
 
 interface AppState {
   drawnPolygon: Polygon | null;
-  selectedFeatureId: string | null;
+  selectedFeatureId: number | null;
   selectedCategory: string | null;
 
   areaInfo: AreaInfo | null;
   lampFeatures: FeatureCollection | null;
+  buildingsFeatures: FeatureCollection | null;
   lampKpis: LayerKpis | null;
   categoryData: CategoryDatum[];
   areaKm2: number;
@@ -27,38 +28,16 @@ interface AppState {
   error: string | null;
 
   setDrawnPolygon: (p: Polygon | null) => void;
-  setSelectedFeatureId: (id: string | null) => void;
+  setSelectedFeatureId: (id: number | null) => void;
   setSelectedCategory: (c: string | null) => void;
   fetchData: (p: Polygon | null) => Promise<void>;
 }
 
-function toFeatureCollection(raw: any[]): FeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: raw.map<Feature>((r) => ({
-      type: 'Feature',
-      id: r.id,
-      geometry: r.geometry,
-      properties: r.properties ?? { id: r.id, category: null },
-    })),
-  };
-}
+const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
+const EMPTY_FC = (): FeatureCollection => ({ type: 'FeatureCollection', features: [] });
 
-// Shoelace + haversine, in km² — used only if backend didn't return area.
-function polygonAreaKm2(poly: Polygon | null): number {
-  if (!poly) return 0;
-  const ring = poly.coordinates[0] as [number, number][];
-  if (ring.length < 3) return 0;
-  const R = 6371;
-  let area = 0;
-  for (let i = 0; i < ring.length - 1; i++) {
-    const [x1, y1] = ring[i];
-    const [x2, y2] = ring[i + 1];
-    area += ((x2 - x1) * Math.PI / 180) *
-            (2 + Math.sin(y1 * Math.PI / 180) + Math.sin(y2 * Math.PI / 180));
-  }
-  return Math.abs((area * R * R) / 2);
-}
+let drawTimer: ReturnType<typeof setTimeout> | null = null;
+let inflight: AbortController | null = null;
 
 export const useAppStore = create<AppState>((set, get) => ({
   drawnPolygon: null,
@@ -66,6 +45,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedCategory: null,
   areaInfo: null,
   lampFeatures: null,
+  buildingsFeatures: null,
   lampKpis: null,
   categoryData: [],
   areaKm2: 0,
@@ -74,48 +54,57 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setDrawnPolygon: (polygon) => {
     set({ drawnPolygon: polygon, selectedFeatureId: null });
-    get().fetchData(polygon);
+    if (drawTimer) clearTimeout(drawTimer);
+    drawTimer = setTimeout(() => get().fetchData(polygon), 300);
   },
+
   setSelectedFeatureId: (id) => set({ selectedFeatureId: id }),
+
   setSelectedCategory: (category) => {
     set({ selectedCategory: get().selectedCategory === category ? null : category });
   },
 
   fetchData: async (polygon) => {
+    inflight?.abort();
+    inflight = new AbortController();
     set({ loading: true, error: null, selectedCategory: null, selectedFeatureId: null });
     try {
       const { data } = await axios.post<ApiResponse>(
         `/api/kpis/?layers=${LAMP_LAYER},${CHART_LAYER}`,
-        { geojson: polygon ?? null }
+        { geojson: polygon ?? null },
+        { signal: inflight.signal },
       );
 
-      const lampRaw = data.geometry?.[LAMP_LAYER] ?? [];
-      const lampFeatures = toFeatureCollection(lampRaw);
-      const lampKpis = data.kpis?.[LAMP_LAYER] ?? null;
+      const vectors = data.layers?.vectors ?? [];
+      const byName: Record<string, FeatureCollection> = Object.fromEntries(
+        vectors.map((fc: any) => [fc.name, fc]),
+      );
 
-      const chartBucket = data.kpis?.[CHART_LAYER]?.by_subtype ?? {};
-      const categoryData: CategoryDatum[] = Object.entries(chartBucket)
+      const lampFeatures = byName[LAMP_LAYER] ?? EMPTY_FC();
+      const buildingsFeatures = byName[CHART_LAYER] ?? EMPTY_FC();
+      const lampKpis = data.by_layer?.[LAMP_LAYER] ?? null;
+
+      const bucket = data.by_layer?.[CHART_LAYER]?.by_subtype ?? {};
+      const categoryData: CategoryDatum[] = Object.entries(bucket)
         .map(([category, count]) => ({
           category,
           count: count as number,
           layer: CHART_LAYER,
         }))
         .sort((a, b) => b.count - a.count)
-        .slice(0, 8); // top 8 categories keeps the chart legible
-
-      const areaKm2 = polygon
-        ? polygonAreaKm2(polygon)
-        : 25; // fallback district size for whole-district view
+        .slice(0, 8);
 
       set({
         areaInfo: data.area,
+        areaKm2: data.area?.km2 ?? 0,
         lampFeatures,
+        buildingsFeatures,
         lampKpis,
         categoryData,
-        areaKm2,
         loading: false,
       });
     } catch (err: any) {
+      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
       set({
         error: err.response?.data?.error ?? err.message ?? 'Request failed',
         loading: false,
