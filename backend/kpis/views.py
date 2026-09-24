@@ -4,11 +4,12 @@ import json
 
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 
 from .areas import resolve
 from .duck import LAYERS, connect, geometry_for_layer, kpis_for_layer
 
-
+@csrf_exempt
 @require_http_methods(["GET", "POST"])
 def kpis(request: HttpRequest) -> JsonResponse:
     # Area can come from query string (district/bbox) or POST body (geojson).

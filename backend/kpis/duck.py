@@ -41,6 +41,12 @@ LAYERS: dict[str, dict[str, Any]] = {
         "geom": "geometry",
         "group_by": "subtype",
     },
+    "street_lamps": {
+        "file": "infrastructure.parquet",
+        "geom": "geometry",
+        "group_by": "class",               # will just say 'street_lamp' — fine, or set None
+        "where": "subtype = 'utility' AND class = 'street_lamp'",  # NEW
+    },
 }
 
 
@@ -149,6 +155,10 @@ def kpis_for_layer(
             WHERE ST_Intersects(t.{geom}, {area_geom_sql})
         )
     """
+    where_extra = spec.get("where")
+    where_sql = f"WHERE ST_Intersects(t.{geom}, {area_geom_sql})"
+    if where_extra:
+        where_sql += f" AND {where_extra}"
 
     if layer == "buildings":
         agg = """
