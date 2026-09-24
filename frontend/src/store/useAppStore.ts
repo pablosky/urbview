@@ -1,10 +1,11 @@
 import axios from 'axios';
 import { create } from 'zustand';
 import type { FeatureCollection, Polygon } from 'geojson';
-import type { ApiResponse, AreaInfo, LayerKpis } from '../types';
+import type { ApiResponse, AreaInfo, Kpi, LayerKpis } from '../types';
 
 export const LAMP_LAYER = 'street_lamps';
 export const CHART_LAYER = 'buildings';
+export const STREETS_LAYER = 'streets';
 
 interface CategoryDatum {
   category: string;
@@ -20,9 +21,13 @@ interface AppState {
   areaInfo: AreaInfo | null;
   lampFeatures: FeatureCollection | null;
   buildingsFeatures: FeatureCollection | null;
+  streetsFeatures: FeatureCollection | null;
   lampKpis: LayerKpis | null;
   categoryData: CategoryDatum[];
   areaKm2: number;
+
+  kpis: Kpi[];
+  insights: string[];
 
   loading: boolean;
   error: string | null;
@@ -33,7 +38,6 @@ interface AppState {
   fetchData: (p: Polygon | null) => Promise<void>;
 }
 
-const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
 const EMPTY_FC = (): FeatureCollection => ({ type: 'FeatureCollection', features: [] });
 
 let drawTimer: ReturnType<typeof setTimeout> | null = null;
@@ -46,9 +50,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   areaInfo: null,
   lampFeatures: null,
   buildingsFeatures: null,
+  streetsFeatures: null,
   lampKpis: null,
   categoryData: [],
   areaKm2: 0,
+  kpis: [],
+  insights: [],
   loading: false,
   error: null,
 
@@ -70,7 +77,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ loading: true, error: null, selectedCategory: null, selectedFeatureId: null });
     try {
       const { data } = await axios.post<ApiResponse>(
-        `/api/kpis/?layers=${LAMP_LAYER},${CHART_LAYER}`,
+        `/api/kpis/?layers=${LAMP_LAYER},${CHART_LAYER},${STREETS_LAYER}`,
         { geojson: polygon ?? null },
         { signal: inflight.signal },
       );
@@ -82,6 +89,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const lampFeatures = byName[LAMP_LAYER] ?? EMPTY_FC();
       const buildingsFeatures = byName[CHART_LAYER] ?? EMPTY_FC();
+      const streetsFeatures = byName[STREETS_LAYER] ?? EMPTY_FC();
       const lampKpis = data.by_layer?.[LAMP_LAYER] ?? null;
 
       const bucket = data.by_layer?.[CHART_LAYER]?.by_subtype ?? {};
@@ -99,8 +107,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         areaKm2: data.area?.km2 ?? 0,
         lampFeatures,
         buildingsFeatures,
+        streetsFeatures,
         lampKpis,
         categoryData,
+        kpis: data.kpis ?? [],
+        insights: data.insights ?? [],
         loading: false,
       });
     } catch (err: any) {

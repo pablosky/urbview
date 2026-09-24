@@ -7,6 +7,7 @@ import { useAppStore } from './store/useAppStore';
 import KpiPanel from './components/Dashboard/KpiPanel';
 import ChartPanel from './components/Dashboard/ChartPanel';
 import FeatureCard from './components/Dashboard/FeatureCard';
+import InsightsPanel from './components/Dashboard/InsightsPanel';
 
 function Dashboard() {
   return (
@@ -16,9 +17,15 @@ function Dashboard() {
         <KpiPanel />
       </div>
       <div className="panel">
+        <h2>Insights</h2>
+        <InsightsPanel />
+      </div>
+
+      <div className="panel">
         <h2>Buildings by subtype</h2>
         <ChartPanel />
       </div>
+
       <FeatureCard />
     </div>
   );
