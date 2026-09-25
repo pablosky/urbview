@@ -8,7 +8,6 @@ import KpiPanel from './components/Dashboard/KpiPanel';
 import ChartPanel from './components/Dashboard/ChartPanel';
 import FeatureCard from './components/Dashboard/FeatureCard';
 import InsightsPanel from './components/Dashboard/InsightsPanel';
-
 function Dashboard() {
   return (
     <div className="dashboard-container">
@@ -25,8 +24,10 @@ function Dashboard() {
         <h2>Buildings by subtype</h2>
         <ChartPanel />
       </div>
-
-      <FeatureCard />
+      <div className="panel">
+        <h2>Feature</h2>
+        <FeatureCard />
+      </div>
     </div>
   );
 }

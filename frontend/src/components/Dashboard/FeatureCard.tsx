@@ -1,26 +1,39 @@
 import { useAppStore } from '../../store/useAppStore';
 
 export default function FeatureCard() {
-  const { lampFeatures, selectedFeatureId, setSelectedFeatureId } = useAppStore();
+  const {
+    selectedFeatureId,
+    featureDetail,
+    loadingFeature,
+    setSelectedFeatureId,
+  } = useAppStore();
 
-  if (!selectedFeatureId) return null;
-  const feature = lampFeatures?.features.find(
-    (f) => String(f.id) === selectedFeatureId
-  );
-  if (!feature) return null;
+  if (selectedFeatureId === null) return null;
 
-  const p = feature.properties ?? {};
   return (
     <div className="feature-card">
-      <div className="feature-card-head">
-        <strong>Selected feature</strong>
-        <button onClick={() => setSelectedFeatureId(null)}>×</button>
-      </div>
-      <ul>
-        <li><span>ID</span><span>{String(feature.id)}</span></li>
-        {p.category && <li><span>Class</span><span>{p.category}</span></li>}
-        <li><span>Contribution</span><span>1 of {(lampFeatures?.features.length ?? 0).toLocaleString()} lamps in area</span></li>
-      </ul>
+      <button
+        className="feature-card-close"
+        onClick={() => setSelectedFeatureId(null)}
+        aria-label="Deselect"
+      >
+        ×
+      </button>
+
+      {loadingFeature && <p className="muted">Loading…</p>}
+
+      {!loadingFeature && featureDetail && (
+        <>
+          <div className="feature-card-label">{featureDetail.label}</div>
+          <div className="feature-card-formula">
+            Street metres where distance(lamp, street) ≤ 25 m
+          </div>
+        </>
+      )}
+
+      {!loadingFeature && !featureDetail && (
+        <p className="muted">Feature not in this area.</p>
+      )}
     </div>
   );
 }

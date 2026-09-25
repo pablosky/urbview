@@ -26,6 +26,13 @@ export interface LayerKpis {
   by_primary?: Record<string, number>;
 }
 
+export interface FeatureDetail {
+  layer: string;
+  id: string;
+  label: string;
+  contribution: Record<string, unknown>;
+}
+
 export interface ApiResponse {
   area: AreaInfo;
   kpis: Kpi[];
@@ -34,3 +41,6 @@ export interface ApiResponse {
   legend: any | null;
   layers: { vectors: FeatureCollection[] };
 }
+
+export type FeatureCollectionOf<T> = FeatureCollection<Geometry, T>;
+export type { Feature, FeatureCollection };

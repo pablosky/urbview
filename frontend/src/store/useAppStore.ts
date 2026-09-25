@@ -1,11 +1,12 @@
 import axios from 'axios';
 import { create } from 'zustand';
 import type { FeatureCollection, Polygon } from 'geojson';
-import type { ApiResponse, AreaInfo, Kpi, LayerKpis } from '../types';
+import type { ApiResponse, AreaInfo, FeatureDetail, Kpi, LayerKpis } from '../types';
 
 export const LAMP_LAYER = 'street_lamps';
 export const CHART_LAYER = 'buildings';
 export const STREETS_LAYER = 'streets';
+export const DEFAULT_DISTRICT = 'eixample';
 
 interface CategoryDatum {
   category: string;
@@ -15,7 +16,7 @@ interface CategoryDatum {
 
 interface AppState {
   drawnPolygon: Polygon | null;
-  selectedFeatureId: number | null;
+  selectedFeatureId: string | null;
   selectedCategory: string | null;
 
   areaInfo: AreaInfo | null;
@@ -29,11 +30,14 @@ interface AppState {
   kpis: Kpi[];
   insights: string[];
 
+  featureDetail: FeatureDetail | null;
+  loadingFeature: boolean;
+
   loading: boolean;
   error: string | null;
 
   setDrawnPolygon: (p: Polygon | null) => void;
-  setSelectedFeatureId: (id: number | null) => void;
+  setSelectedFeatureId: (id: string | null) => Promise<void>;
   setSelectedCategory: (c: string | null) => void;
   fetchData: (p: Polygon | null) => Promise<void>;
 }
@@ -56,16 +60,38 @@ export const useAppStore = create<AppState>((set, get) => ({
   areaKm2: 0,
   kpis: [],
   insights: [],
+  featureDetail: null,
+  loadingFeature: false,
   loading: false,
   error: null,
 
   setDrawnPolygon: (polygon) => {
-    set({ drawnPolygon: polygon, selectedFeatureId: null });
+    set({ drawnPolygon: polygon, selectedFeatureId: null, featureDetail: null });
     if (drawTimer) clearTimeout(drawTimer);
     drawTimer = setTimeout(() => get().fetchData(polygon), 300);
   },
 
-  setSelectedFeatureId: (id) => set({ selectedFeatureId: id }),
+  setSelectedFeatureId: async (id) => {
+    set({ selectedFeatureId: id, featureDetail: null });
+    if (id === null) return;
+
+    const state = get();
+    set({ loadingFeature: true });
+    try {
+      const params = new URLSearchParams();
+      const body: Record<string, unknown> = {};
+      if (state.drawnPolygon) {
+        body.geojson = state.drawnPolygon;
+      } else {
+        params.set('district', DEFAULT_DISTRICT);
+      }
+      const url = `/api/feature/${LAMP_LAYER}/${encodeURIComponent(id)}?${params.toString()}`;
+      const { data } = await axios.post<FeatureDetail>(url, body);
+      set({ featureDetail: data, loadingFeature: false });
+    } catch {
+      set({ featureDetail: null, loadingFeature: false });
+    }
+  },
 
   setSelectedCategory: (category) => {
     set({ selectedCategory: get().selectedCategory === category ? null : category });
@@ -74,11 +100,28 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchData: async (polygon) => {
     inflight?.abort();
     inflight = new AbortController();
-    set({ loading: true, error: null, selectedCategory: null, selectedFeatureId: null });
+    set({
+      loading: true,
+      error: null,
+      selectedCategory: null,
+      selectedFeatureId: null,
+      featureDetail: null,
+    });
+
+    const params = new URLSearchParams({
+      layers: `${LAMP_LAYER},${CHART_LAYER},${STREETS_LAYER}`,
+    });
+    const body: Record<string, unknown> = {};
+    if (polygon) {
+      body.geojson = polygon;
+    } else {
+      params.set('district', DEFAULT_DISTRICT);
+    }
+
     try {
       const { data } = await axios.post<ApiResponse>(
-        `/api/kpis/?layers=${LAMP_LAYER},${CHART_LAYER},${STREETS_LAYER}`,
-        { geojson: polygon ?? null },
+        `/api/kpis/?${params.toString()}`,
+        body,
         { signal: inflight.signal },
       );
 

@@ -7,7 +7,7 @@ export default function InsightsPanel() {
 
   return (
     <div className="insights-panel">
-      <ul className="insights-list kpi-list">
+      <ul className="insights-list">
         {insights.map((s, i) => (
           <li key={i}>{s}</li>
         ))}

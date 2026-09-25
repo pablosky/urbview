@@ -1,6 +1,8 @@
 from django.urls import path
-from .views import kpis
+from . import views
+
 
 urlpatterns = [
-    path("kpis/", kpis, name="kpis"),
+    path("kpis/", views.kpis, name="kpis"),
+    path("feature/<str:layer>/<str:fid>", views.feature, name="feature"),
 ]

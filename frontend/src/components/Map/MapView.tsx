@@ -68,10 +68,16 @@ export default function MapView() {
         source: 'lamps',
         paint: {
           'circle-radius': [
-            'case', ['boolean', ['feature-state', 'selected'], false], 9, 5,
+            'case',
+            ['boolean', ['feature-state', 'selected'], false],
+            9,
+            5,
           ],
           'circle-color': [
-            'case', ['boolean', ['feature-state', 'selected'], false], '#ef4444', '#2563eb',
+            'case',
+            ['boolean', ['feature-state', 'selected'], false],
+            '#ef4444',
+            '#2563eb',
           ],
           'circle-stroke-color': '#ffffff',
           'circle-stroke-width': 1.5,
@@ -106,16 +112,23 @@ export default function MapView() {
     });
     map.on('draw.delete', () => setDrawnPolygon(null));
 
-    map.on('click', 'lamps-layer', (e) => {
-      const f = e.features?.[0];
-      if (f && f.id !== undefined) setSelectedFeatureId(Number(f.id));
-    });
     map.on('click', (e) => {
-      const hits = map.queryRenderedFeatures(e.point, { layers: ['lamps-layer'] });
-      if (hits.length === 0) setSelectedFeatureId(null);
+      const hits = map.queryRenderedFeatures(e.point, {
+        layers: ['lamps-layer'],
+      });
+      if (hits.length > 0 && hits[0].id !== undefined) {
+        setSelectedFeatureId(String(hits[0].id));
+      } else {
+        setSelectedFeatureId(null);
+      }
     });
-    map.on('mouseenter', 'lamps-layer', () => { map.getCanvas().style.cursor = 'pointer'; });
-    map.on('mouseleave', 'lamps-layer', () => { map.getCanvas().style.cursor = ''; });
+
+    map.on('mouseenter', 'lamps-layer', () => {
+      map.getCanvas().style.cursor = 'pointer';
+    });
+    map.on('mouseleave', 'lamps-layer', () => {
+      map.getCanvas().style.cursor = '';
+    });
 
     return () => {
       map.remove();
@@ -129,14 +142,16 @@ export default function MapView() {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
     const src = map.getSource('lamps') as maplibregl.GeoJSONSource | undefined;
-    src?.setData(lampFeatures ?? { type: 'FeatureCollection', features: [] });
+    if (!src) return;
+    src.setData(lampFeatures ?? { type: 'FeatureCollection', features: [] });
   }, [lampFeatures]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
     const src = map.getSource('buildings') as maplibregl.GeoJSONSource | undefined;
-    src?.setData(buildingsFeatures ?? { type: 'FeatureCollection', features: [] });
+    if (!src) return;
+    src.setData(buildingsFeatures ?? { type: 'FeatureCollection', features: [] });
   }, [buildingsFeatures]);
 
   useEffect(() => {
@@ -144,7 +159,10 @@ export default function MapView() {
     if (!map || !map.getLayer('buildings-layer')) return;
     if (selectedCategory) {
       map.setPaintProperty('buildings-layer', 'fill-opacity', [
-        'case', ['==', ['get', 'subtype'], selectedCategory], 0.65, 0.08,
+        'case',
+        ['==', ['get', 'subtype'], selectedCategory],
+        0.65,
+        0.08,
       ]);
     } else {
       map.setPaintProperty('buildings-layer', 'fill-opacity', 0.35);
@@ -155,11 +173,17 @@ export default function MapView() {
     const map = mapRef.current;
     if (!map || !map.getLayer('lamps-layer')) return;
     if (selectedFeatureId !== null) {
-      map.setFeatureState({ source: 'lamps', id: selectedFeatureId }, { selected: true });
+      map.setFeatureState(
+        { source: 'lamps', id: selectedFeatureId },
+        { selected: true }
+      );
     } else {
       map.querySourceFeatures('lamps').forEach((f) => {
         if (f.id !== undefined) {
-          map.setFeatureState({ source: 'lamps', id: f.id }, { selected: false });
+          map.setFeatureState(
+            { source: 'lamps', id: f.id },
+            { selected: false }
+          );
         }
       });
     }

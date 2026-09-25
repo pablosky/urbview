@@ -86,7 +86,9 @@ def area_km2(con: duckdb.DuckDBPyConnection, area_geom_sql: str) -> float:
     return float(con.execute(q).fetchone()[0])
 
 
-def lit_street_share(con: duckdb.DuckDBPyConnection, area_geom_sql: str) -> dict[str, float]:
+def lit_street_share(
+    con: duckdb.DuckDBPyConnection, area_geom_sql: str
+) -> dict[str, float]:
     """Share of street-centreline metres that lie within 25 m of a street lamp."""
     streets = DATA_DIR / LAYERS["streets"]["file"]
     infra = DATA_DIR / LAYERS["infrastructure"]["file"]
@@ -250,13 +252,10 @@ def geometry_for_layer(
     path = DATA_DIR / spec["file"]
     geom = spec["geom"]
     where_sql = _where_clause(spec, area_geom_sql)
-
-    props = spec.get("props", [])
-    if props:
-        entries = ", ".join(f"'{p.split('.')[-1]}', t.{p}" for p in props)
-        props_sql = f"json_object({entries})"
-    else:
-        props_sql = "json_object()"
+    parts = ["'id'", "t.id"]
+    for p in spec.get("props", []):
+        parts.extend([f"'{p.split('.')[-1]}'", f"t.{p}"])
+    props_sql = f"json_object({', '.join(parts)})"
 
     sql = f"""
         WITH clipped AS (
@@ -285,3 +284,113 @@ def geometry_for_layer(
             "geometry": json.loads(gj),
         })
     return _feature_collection(layer, features)
+
+
+# ---------------------------------------------------------------- feature detail
+
+def feature_contribution(
+    con: duckdb.DuckDBPyConnection,
+    layer: str,
+    feature_id: str,
+    area_geom_sql: str,
+) -> dict[str, Any] | None:
+    """What a single feature contributes inside the area. Returns None if not found."""
+    spec = LAYERS[layer]
+    path = DATA_DIR / spec["file"]
+    fid = feature_id.replace("'", "''")
+
+    if layer == "street_lamps":
+        streets = DATA_DIR / LAYERS["streets"]["file"]
+        sql = f"""
+            WITH area AS (SELECT {area_geom_sql} AS g),
+            lamp AS (
+                SELECT {_metric("geometry")} AS g
+                FROM read_parquet('{path}')
+                WHERE id = '{fid}'
+                  AND class = 'street_lamp'
+                  AND subtype = 'transportation'
+            ),
+            streets_m AS (
+                SELECT {_metric("ST_Intersection(s.geometry, (SELECT g FROM area))")} AS g
+                FROM read_parquet('{streets}') s
+                WHERE ST_Intersects(s.geometry, (SELECT g FROM area))
+            )
+            SELECT COALESCE(SUM(
+                CASE WHEN ST_DWithin(s.g, l.g, 25) THEN ST_Length(s.g) ELSE 0 END
+            ), 0)
+            FROM streets_m s, lamp l
+        """
+        row = con.execute(sql).fetchone()
+        if row is None:
+            return None
+        metres = round(float(row[0]), 1)
+        return {
+            "layer": layer,
+            "id": feature_id,
+            "label": f"Lights {metres} m of street",
+            "contribution": {"street_m": metres},
+        }
+
+    if layer == "buildings":
+        sql = f"""
+            WITH area AS (SELECT {area_geom_sql} AS g)
+            SELECT height,
+                   ST_Area_Spheroid(ST_FlipCoordinates(
+                       ST_Intersection(geometry, (SELECT g FROM area))
+                   ))
+            FROM read_parquet('{path}')
+            WHERE id = '{fid}'
+        """
+        row = con.execute(sql).fetchone()
+        if row is None:
+            return None
+        height, area_m2 = row
+        m2 = round(float(area_m2 or 0), 1)
+        parts = [f"{m2} m² footprint"]
+        if height is not None:
+            parts.append(f"{round(float(height), 1)} m tall")
+        return {
+            "layer": layer,
+            "id": feature_id,
+            "label": ", ".join(parts),
+            "contribution": {
+                "footprint_m2": m2,
+                "height_m": float(height) if height is not None else None,
+            },
+        }
+
+    if layer == "streets":
+        infra = DATA_DIR / LAYERS["infrastructure"]["file"]
+        sql = f"""
+            WITH area AS (SELECT {area_geom_sql} AS g),
+            s AS (
+                SELECT {_metric("ST_Intersection(geometry, (SELECT g FROM area))")} AS g,
+                       class
+                FROM read_parquet('{path}')
+                WHERE id = '{fid}'
+                  AND ST_Intersects(geometry, (SELECT g FROM area))
+            ),
+            lamps_m AS (
+                SELECT {_metric("geometry")} AS g
+                FROM read_parquet('{infra}')
+                WHERE class = 'street_lamp' AND subtype = 'transportation'
+                  AND ST_Intersects(geometry, (SELECT g FROM area))
+            )
+            SELECT class,
+                   ST_Length(s.g),
+                   EXISTS (SELECT 1 FROM lamps_m l WHERE ST_DWithin(s.g, l.g, 25))
+            FROM s
+        """
+        row = con.execute(sql).fetchone()
+        if row is None:
+            return None
+        cls, length_m, lit = row
+        length_m = round(float(length_m or 0), 1)
+        return {
+            "layer": layer,
+            "id": feature_id,
+            "label": f"{length_m} m, {'lit' if lit else 'unlit'} ({cls or 'unclassified'})",
+            "contribution": {"length_m": length_m, "lit": bool(lit), "class": cls},
+        }
+
+    return None

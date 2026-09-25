@@ -11,6 +11,7 @@ from .duck import (
     LAYERS,
     area_km2,
     connect,
+    feature_contribution,
     geometry_for_layer,
     kpis_for_layer,
     lit_street_share,
@@ -27,7 +28,6 @@ def _band_lit(v: float) -> str:
     return "Poorly lit"
 
 
-# `requires` lists layers that must be in the request for the KPI to appear.
 KPI_SPECS: list[dict] = [
     {
         "key": "lit_street_share",
@@ -122,6 +122,11 @@ def build_insights(area_name: str, kpis: list[dict]) -> list[str]:
             f"{k['value']}% of street metres in {area_name} run within 25 m of "
             f"a street lamp — {k['band'].lower()}."
         )
+        if k["value"] < 30:
+            out.append(
+                "Overture's lamp inventory is sparse here — the low share "
+                "reflects missing data more than unlit streets."
+            )
     if "building_count" in by and "building_area_ha" in by:
         out.append(
             f"{by['building_count']['value']:,} building footprints cover "
@@ -146,13 +151,13 @@ def build_legend(wanted: list[str]) -> dict | None:
         "field": "lit",
         "title": "Street lighting coverage",
         "items": [
-            {"value": True,  "label": "Within 25 m of a lamp",    "color": "#16a34a"},
-            {"value": False, "label": "More than 25 m from a lamp", "color": "#b91c1c"},
+            {"value": True,  "label": "Within 25 m of a lamp",       "color": "#16a34a"},
+            {"value": False, "label": "More than 25 m from a lamp",  "color": "#b91c1c"},
         ],
     }
 
 
-# ---------------------------------------------------------------------- view
+# ---------------------------------------------------------------------- views
 
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
@@ -210,9 +215,42 @@ def kpis(request: HttpRequest) -> JsonResponse:
             "bbox": list(area.bbox),
             "source": area.source,
         },
-        "by_layer": raw,
         "kpis": kpi_list,
+        "by_layer": raw,
         "insights": insights,
         "legend": build_legend(wanted),
         "layers": {"vectors": vectors},
     })
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def feature(request: HttpRequest, layer: str, fid: str) -> JsonResponse:
+    district = request.GET.get("district")
+    bbox = request.GET.get("bbox")
+    geojson = None
+    if request.method == "POST":
+        try:
+            geojson = json.loads(request.body or "{}").get("geojson")
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "invalid JSON body"}, status=400)
+
+    if layer not in LAYERS:
+        return JsonResponse({"error": f"unknown layer: {layer}"}, status=400)
+
+    try:
+        area = resolve(district, bbox, geojson)
+    except ValueError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+    con = connect()
+    try:
+        detail = feature_contribution(
+            con, layer, str(fid), f"ST_GeomFromText('{area.wkt}')"
+        )
+    finally:
+        con.close()
+
+    if detail is None:
+        return JsonResponse({"error": "feature not found in this area"}, status=404)
+    return JsonResponse(detail)
