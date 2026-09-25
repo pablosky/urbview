@@ -3,7 +3,7 @@ from django.urls import path, include
 from django.shortcuts import render
 from rest_framework.authtoken.views import obtain_auth_token
 
-
+from kpis.views import CustomLoginView  # <--- import custom view
 
 def home(request):
     print('dsa')
@@ -11,6 +11,6 @@ def home(request):
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/', include('kpis.urls')), # Assuming your app urls are here
-    path('api-token-auth/', obtain_auth_token, name='api_token_auth'), # Add this
+    path('api/', include('kpis.urls')),
+    path('api-token-auth/', CustomLoginView.as_view(), name='api_token_auth'),
 ]

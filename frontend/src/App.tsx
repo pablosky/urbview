@@ -8,6 +8,10 @@ import KpiPanel from './components/Dashboard/KpiPanel';
 import ChartPanel from './components/Dashboard/ChartPanel';
 import FeatureCard from './components/Dashboard/FeatureCard';
 import InsightsPanel from './components/Dashboard/InsightsPanel';
+import { UserMenu } from './components/Auth/UserMenu';
+// frontend/src/App.tsx (inside Dashboard)
+import RecentSaves from './components/Dashboard/RecentSaves';
+
 function Dashboard() {
   return (
     <div className="dashboard-container">
@@ -19,6 +23,10 @@ function Dashboard() {
         <h2>Insights</h2>
         <InsightsPanel />
       </div>
+      <div className="panel">
+        <h2>Recent KPIs Saved</h2>
+        <RecentSaves />
+      </div>
 
       <div className="panel">
         <h2>Buildings by subtype</h2>
@@ -28,49 +36,28 @@ function Dashboard() {
         <h2>Feature</h2>
         <FeatureCard />
       </div>
+
     </div>
   );
 }
 
-// function Dashboard() {
-//   const { kpis, loading, error, areaInfo } = useAppStore();
-
-//   return (
-//     <div className="dashboard-container">
-//       <div className="panel">
-//         <h2>KPIs</h2>
-//         {loading && <p>Loading…</p>}
-//         {error && <p style={{ color: 'red' }}>{error}</p>}
-//         {!loading && !error && kpis && (
-//           <ul style={{ listStyle: 'none', display: 'grid', gap: 8 }}>
-//             <li><strong>Total:</strong> {kpis.count ?? 0}</li>
-//             {kpis.length_m !== undefined && (
-//               <li><strong>Length:</strong> {(kpis.length_m / 1000).toFixed(2)} km</li>
-//             )}
-//             {kpis.area_m2 !== undefined && (
-//               <li><strong>Area:</strong> {(kpis.area_m2 / 1e6).toFixed(3)} km²</li>
-//             )}
-//           </ul>
-//         )}
-//         {!loading && !error && !kpis && <p>Draw an area to begin.</p>}
-//         <p style={{ marginTop: 12, fontSize: 12, color: '#64748b' }}>
-//           {areaInfo?.source === 'geojson' ? 'Drawn area' : areaInfo?.source ?? 'Whole district'}
-//         </p>
-//       </div>
-
-//       <div className="panel">
-//         <h2>Chart</h2>
-//         <p style={{ color: '#94a3b8' }}>Coming in Step 3…</p>
-//       </div>
-//     </div>
-//   );
-// }
-
 export default function App() {
   return (
     <div className="app-container">
-      <div className="map-container">
+      <div className="map-container" style={{ position: 'relative' }}>
         <MapView />
+
+        {/* Floating user menu over the top-right of the map */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '1rem',
+            right: '1rem',
+            zIndex: 20,
+          }}
+        >
+          <UserMenu />
+        </div>
       </div>
       <Dashboard />
     </div>

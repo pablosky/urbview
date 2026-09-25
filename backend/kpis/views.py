@@ -5,7 +5,6 @@ import json
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-
 from .areas import resolve
 from .duck import (
     LAYERS,
@@ -16,8 +15,53 @@ from .duck import (
     kpis_for_layer,
     lit_street_share,
 )
+from rest_framework import generics, status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.authtoken.models import Token
+from rest_framework.authtoken.views import ObtainAuthToken
+from .models import SavedKpi
+from .serializers import SavedKpiSerializer
+from .serializers import UserRegistrationSerializer
 
+class CustomLoginView(ObtainAuthToken):
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        token, created = Token.objects.get_or_create(user=user)
+        return Response({
+            'token': token.key,
+            'username': user.username,
+            'email': user.email,
+        })
 
+class RegisterUserView(generics.CreateAPIView):
+    serializer_class = UserRegistrationSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+        # Generate token for the new user so they are logged in immediately
+        token, created = Token.objects.get_or_create(user=user)
+
+        return Response({
+            'token': token.key,
+            'username': user.username
+        }, status=status.HTTP_201_CREATED)
+
+class SaveKpiView(generics.ListCreateAPIView):
+    serializer_class = SavedKpiSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Only return the current user's saves, latest first, last 5 only
+        return SavedKpi.objects.filter(user=self.request.user).order_by('-saved_at')[:5]
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 # --------------------------------------------------------------------- KPI specs
 
 def _band_lit(v: float) -> str:

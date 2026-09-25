@@ -17,9 +17,11 @@ INSTALLED_APPS = [
     "kpis",
     'rest_framework',
     'rest_framework.authtoken',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -76,3 +78,24 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# backend/config/settings.py
+
+# CORS Configuration
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",   # Vite default
+    "http://localhost:3000",   # CRA default
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+]
+
+# Optional but recommended: Allow the Authorization header (needed for Token auth)
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'authorization',
+    'content-type',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
