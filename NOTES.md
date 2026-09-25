@@ -218,5 +218,3 @@ source; no external datasets are joined.
 The 25 m reach value has no external citation. It was selected to reflect
 typical residential lamp spacing and is stated here to make the basis
 traceable.
-
-pdf generated with  npx @marp-team/marp-cli WALKTHROUGH.md -o WALKTHROUGH.pdf --pdf
